@@ -508,262 +508,262 @@ const enviar_audio = async (req, res) => {
     }
 }
 
-const enviar_audio_firebase = async (req, res) => {
-    try {
-        // const querySnapShot = await db.collection('users').get()
-        // const data = querySnapShot.docs[0].data()
-        // res.json(data)
-        //Guardar en firebase
-        // await db.collection('users').add({
-        //     code_iso:'helo',
-        //     name:'gino1',
-        //     url_audio_original:'jalskdf',
-        //     url_audio_traducido:'jalskdf',
-        // })
+// const enviar_audio_firebase = async (req, res) => {
+//     try {
+//         // const querySnapShot = await db.collection('users').get()
+//         // const data = querySnapShot.docs[0].data()
+//         // res.json(data)
+//         //Guardar en firebase
+//         // await db.collection('users').add({
+//         //     code_iso:'helo',
+//         //     name:'gino1',
+//         //     url_audio_original:'jalskdf',
+//         //     url_audio_traducido:'jalskdf',
+//         // })
 
-        //res.json({ mensaje: 'creado con exito' })
-        const { mensaje, uid_chat, uid_usuario } = req.body
-        const unChat = await Chat.findByPk(uid_chat)
+//         //res.json({ mensaje: 'creado con exito' })
+//         const { mensaje, uid_chat, uid_usuario } = req.body
+//         const unChat = await Chat.findByPk(uid_chat)
 
-        if (unChat) {
-            const { uid_usuario_emisor, uid_usuario_receptor } = unChat
-            if (req.files && Object.keys(req.files).length !== 0 && req.files.archivo) {
+//         if (unChat) {
+//             const { uid_usuario_emisor, uid_usuario_receptor } = unChat
+//             if (req.files && Object.keys(req.files).length !== 0 && req.files.archivo) {
 
-                const usuario = await Usuario.findByPk(uid_usuario)
-                const language_iso = await Lenguas_iso.findByPk(usuario.uid_lenguas_iso)
-                const emisor = await Usuario.findByPk(uid_usuario_emisor)
-                const receptor = await Usuario.findByPk(uid_usuario_receptor)
+//                 const usuario = await Usuario.findByPk(uid_usuario)
+//                 const language_iso = await Lenguas_iso.findByPk(usuario.uid_lenguas_iso)
+//                 const emisor = await Usuario.findByPk(uid_usuario_emisor)
+//                 const receptor = await Usuario.findByPk(uid_usuario_receptor)
 
-                const { uid_lenguas_iso: uid_lengua_emisor } = emisor
-                const { uid_lenguas_iso: uid_lengua_receptor } = receptor
+//                 const { uid_lenguas_iso: uid_lengua_emisor } = emisor
+//                 const { uid_lenguas_iso: uid_lengua_receptor } = receptor
 
-                const lengua_emisor = await Lenguas_iso.findByPk(uid_lengua_emisor)
-                const lengua_receptor = await Lenguas_iso.findByPk(uid_lengua_receptor)
+//                 const lengua_emisor = await Lenguas_iso.findByPk(uid_lengua_emisor)
+//                 const lengua_receptor = await Lenguas_iso.findByPk(uid_lengua_receptor)
 
-                const { code_639: code_emisor } = lengua_emisor
-                const { code_639: code_receptor } = lengua_receptor
-
-
-
-                if (uid_usuario == uid_usuario_emisor) {
-                    const { tempFilePath, name } = req.files.archivo
-                    const { secure_url: secure_url_original, public_id } = await cloudinary.uploader.upload(tempFilePath, {
-                        folder: 'traductor_ia',
-                        resource_type: 'auto',
-                        type: 'upload',
-                    })
-
-                    const publicId = public_id
-                    const separar = publicId.split('/')
-                    const nombreCarpeta = separar[0]
-                    const nombreArchivo = separar[1]
-                    //? transcripcion de openAI:
-
-                    //* Descargar el archivo desde la URL de Cloudinary y guardarlo en public/assets
-                    const response = await axios.get(secure_url_original, { responseType: 'arraybuffer' })
-                    const audioBuffer = Buffer.from(response.data)
-
-                    const fileExtension = path.extname(name)
-                    const localFileName = `${nombreArchivo}${fileExtension}`
-                    const localFilePath = path.join(__dirname, '..', 'public', 'assets', localFileName);
-                    fs.writeFileSync(localFilePath, audioBuffer)
-
-                    //* Transcripcion del audio con openAI
-                    const openai = new OpenAI({
-                        apiKey: process.env.API_OPENAI,
-                    })
-
-                    const transcription = await openai.audio.transcriptions.create({
-                        file: fs.createReadStream(path.join(__dirname, '..', 'public', 'assets', `${nombreArchivo}.mp3`)),
-                        model: 'whisper-1',
-                        language: `${code_emisor}`
-
-                    })
-
-                    //* traduccion de la transcipcion del audio 
-                    const languageCode = buscar_LanguageCode(code_receptor)
-                    const text = transcription.text
-
-                    const textoTraducido = await translate(text, languageCode);
-
-                    console.log("textToSynthesize:", textoTraducido);
-                    //* creacion del nuevo audio traducido
-                    const client = new textToSpeech.TextToSpeechClient();
-                    const request = {
-                        input: { text: textoTraducido },
-                        voice: { languageCode, ssmlGender: "NEUTRAL" },
-                        audioConfig: { audioEncoding: "MP3" },
-                    };
-
-                        const [responseGoogle] = await client.synthesizeSpeech(request);
-
-                        // Genera un nombre de archivo único basado en el timestamp
-                        const fileName = `${Date.now()}.mp3`;
-
-                        // Ruta completa del archivo
-                        const filePath = path.join(__dirname, "..", "public", "audio", fileName)
-
-                        // Escribe el contenido binario del audio en el archivo
-                        const writeFile = util.promisify(fs.writeFile);
-                        await writeFile(filePath, responseGoogle.audioContent, "binary")
-                        console.log(`Audio content written to file: ${filePath}`)
-
-                        //* subida del audio traducido a cloudinary
-                        const { secure_url: secure_url_traducido } = await cloudinary.uploader.upload(filePath, {
-                            folder: 'traductor_ia',
-                            resource_type: 'auto',
-                            type: 'upload',
-                        })
-
-                    fs.unlinkSync(localFilePath)
-                    fs.unlinkSync(filePath)
-                    const firebase_message=await db.collection('messages').add({
-                        uid_chat,
-                        uid_usuario,
-                        audio_url_original: secure_url_original,
-                        code_emisor,
-                        audio_url_traducido: secure_url_traducido,
-                        code_receptor
-                    })
-                    const nuevoMensaje = await Messages.create({
-                        mensaje: '$',
-                        uid_chat,
-                        uid_usuario,
-                        audio_url: secure_url_original,
-                        code_639: code_emisor
-                    })
-
-                    const nuevoMensajeTraducido = await Messages.create({
-                        mensaje: '$',
-                        uid_chat,
-                        uid_usuario,
-                        audio_url: secure_url_traducido,
-                        code_639: code_receptor
-                    })
-
-                    return res.json({
-                        nuevoMensaje,
-                        nuevoMensajeTraducido,
-                        firebase_message
-                    })
-
-                } else {
-
-                    const { tempFilePath, name } = req.files.archivo
-                    const { secure_url: secure_url_original, public_id } = await cloudinary.uploader.upload(tempFilePath, {
-                        folder: 'traductor_ia',
-                        resource_type: 'auto',
-                        type: 'upload',
-                    })
-
-                    const publicId = public_id
-                    const separar = publicId.split('/')
-                    const nombreCarpeta = separar[0]
-                    const nombreArchivo = separar[1]
-                    //? transcripcion de openAI:
-
-                    //* Descargar el archivo desde la URL de Cloudinary y guardarlo en public/assets
-                    const response = await axios.get(secure_url_original, { responseType: 'arraybuffer' })
-                    const audioBuffer = Buffer.from(response.data)
-
-                    const fileExtension = path.extname(name)
-                    const localFileName = `${nombreArchivo}${fileExtension}`
-                    const localFilePath = path.join(__dirname, '..', 'public', 'assets', localFileName);
-                    fs.writeFileSync(localFilePath, audioBuffer)
-
-                    //* Transcripcion del audio con openAI
-                    const openai = new OpenAI({
-                        apiKey: process.env.API_OPENAI,
-                    })
-
-                    const transcription = await openai.audio.transcriptions.create({
-                        file: fs.createReadStream(path.join(__dirname, '..', 'public', 'assets', `${nombreArchivo}.mp3`)),
-                        model: 'whisper-1',
-                        language: `${code_receptor}`
-
-                    })
-
-                    //* traduccion de la transcipcion del audio 
-                    const languageCode = buscar_LanguageCode(code_emisor)
-                    const text = transcription.text
-
-                    const textoTraducido = await translate(text, languageCode);
-
-                    console.log("textToSynthesize:", textoTraducido);
-                    //* creacion del nuevo audio traducido
-                    const client = new textToSpeech.TextToSpeechClient();
-                    const request = {
-                        input: { text: textoTraducido },
-                        voice: { languageCode, ssmlGender: "NEUTRAL" },
-                        audioConfig: { audioEncoding: "MP3" },
-                    };
-
-                    const [responseGoogle] = await client.synthesizeSpeech(request);
-
-                    // Genera un nombre de archivo único basado en el timestamp
-                    const fileName = `${Date.now()}.mp3`;
-
-                    // Ruta completa del archivo
-                    const filePath = path.join(__dirname, "..", "public", "audio", fileName)
-
-                    // Escribe el contenido binario del audio en el archivo
-                    const writeFile = util.promisify(fs.writeFile);
-                    await writeFile(filePath, responseGoogle.audioContent, "binary")
-                    console.log(`Audio content written to file: ${filePath}`)
-
-                    //* subida del audio traducido a cloudinary
-                    const { secure_url: secure_url_traducido } = await cloudinary.uploader.upload(filePath, {
-                        folder: 'traductor_ia',
-                        resource_type: 'auto',
-                        type: 'upload',
-                    })
-                    const firebase_message=await db.collection('messages').add({
-                        uid_chat,
-                        uid_usuario,
-                        audio_url_original: secure_url_original,
-                        code_emisor,
-                        audio_url_traducido: secure_url_traducido,
-                        code_receptor
-                    })
-                    const nuevoMensaje = await Messages.create({
-                        mensaje: '$',
-                        uid_chat,
-                        uid_usuario,
-                        audio_url: secure_url_original,
-                        code_639: code_receptor
-                    })
-
-                    const nuevoMensajeTraducido = await Messages.create({
-                        mensaje: '$',
-                        uid_chat,
-                        uid_usuario,
-                        audio_url: secure_url_traducido,
-                        code_639: code_emisor
-                    })
-
-                    return res.json({
-                        nuevoMensaje,
-                        nuevoMensajeTraducido,
-                        firebase_message
-                    })
-                }
+//                 const { code_639: code_emisor } = lengua_emisor
+//                 const { code_639: code_receptor } = lengua_receptor
 
 
 
-            } else {
-                return res.status(400).json({ mensaje: 'no viene un audio en la solicitud' })
-            }
+//                 if (uid_usuario == uid_usuario_emisor) {
+//                     const { tempFilePath, name } = req.files.archivo
+//                     const { secure_url: secure_url_original, public_id } = await cloudinary.uploader.upload(tempFilePath, {
+//                         folder: 'traductor_ia',
+//                         resource_type: 'auto',
+//                         type: 'upload',
+//                     })
 
-        } else {
-            return res.status(400).json({ mensaje: 'el chat no existe' })
-        }
+//                     const publicId = public_id
+//                     const separar = publicId.split('/')
+//                     const nombreCarpeta = separar[0]
+//                     const nombreArchivo = separar[1]
+//                     //? transcripcion de openAI:
+
+//                     //* Descargar el archivo desde la URL de Cloudinary y guardarlo en public/assets
+//                     const response = await axios.get(secure_url_original, { responseType: 'arraybuffer' })
+//                     const audioBuffer = Buffer.from(response.data)
+
+//                     const fileExtension = path.extname(name)
+//                     const localFileName = `${nombreArchivo}${fileExtension}`
+//                     const localFilePath = path.join(__dirname, '..', 'public', 'assets', localFileName);
+//                     fs.writeFileSync(localFilePath, audioBuffer)
+
+//                     //* Transcripcion del audio con openAI
+//                     const openai = new OpenAI({
+//                         apiKey: process.env.API_OPENAI,
+//                     })
+
+//                     const transcription = await openai.audio.transcriptions.create({
+//                         file: fs.createReadStream(path.join(__dirname, '..', 'public', 'assets', `${nombreArchivo}.mp3`)),
+//                         model: 'whisper-1',
+//                         language: `${code_emisor}`
+
+//                     })
+
+//                     //* traduccion de la transcipcion del audio 
+//                     const languageCode = buscar_LanguageCode(code_receptor)
+//                     const text = transcription.text
+
+//                     const textoTraducido = await translate(text, languageCode);
+
+//                     console.log("textToSynthesize:", textoTraducido);
+//                     //* creacion del nuevo audio traducido
+//                     const client = new textToSpeech.TextToSpeechClient();
+//                     const request = {
+//                         input: { text: textoTraducido },
+//                         voice: { languageCode, ssmlGender: "NEUTRAL" },
+//                         audioConfig: { audioEncoding: "MP3" },
+//                     };
+
+//                         const [responseGoogle] = await client.synthesizeSpeech(request);
+
+//                         // Genera un nombre de archivo único basado en el timestamp
+//                         const fileName = `${Date.now()}.mp3`;
+
+//                         // Ruta completa del archivo
+//                         const filePath = path.join(__dirname, "..", "public", "audio", fileName)
+
+//                         // Escribe el contenido binario del audio en el archivo
+//                         const writeFile = util.promisify(fs.writeFile);
+//                         await writeFile(filePath, responseGoogle.audioContent, "binary")
+//                         console.log(`Audio content written to file: ${filePath}`)
+
+//                         //* subida del audio traducido a cloudinary
+//                         const { secure_url: secure_url_traducido } = await cloudinary.uploader.upload(filePath, {
+//                             folder: 'traductor_ia',
+//                             resource_type: 'auto',
+//                             type: 'upload',
+//                         })
+
+//                     fs.unlinkSync(localFilePath)
+//                     fs.unlinkSync(filePath)
+//                     const firebase_message=await db.collection('messages').add({
+//                         uid_chat,
+//                         uid_usuario,
+//                         audio_url_original: secure_url_original,
+//                         code_emisor,
+//                         audio_url_traducido: secure_url_traducido,
+//                         code_receptor
+//                     })
+//                     const nuevoMensaje = await Messages.create({
+//                         mensaje: '$',
+//                         uid_chat,
+//                         uid_usuario,
+//                         audio_url: secure_url_original,
+//                         code_639: code_emisor
+//                     })
+
+//                     const nuevoMensajeTraducido = await Messages.create({
+//                         mensaje: '$',
+//                         uid_chat,
+//                         uid_usuario,
+//                         audio_url: secure_url_traducido,
+//                         code_639: code_receptor
+//                     })
+
+//                     return res.json({
+//                         nuevoMensaje,
+//                         nuevoMensajeTraducido,
+//                         firebase_message
+//                     })
+
+//                 } else {
+
+//                     const { tempFilePath, name } = req.files.archivo
+//                     const { secure_url: secure_url_original, public_id } = await cloudinary.uploader.upload(tempFilePath, {
+//                         folder: 'traductor_ia',
+//                         resource_type: 'auto',
+//                         type: 'upload',
+//                     })
+
+//                     const publicId = public_id
+//                     const separar = publicId.split('/')
+//                     const nombreCarpeta = separar[0]
+//                     const nombreArchivo = separar[1]
+//                     //? transcripcion de openAI:
+
+//                     //* Descargar el archivo desde la URL de Cloudinary y guardarlo en public/assets
+//                     const response = await axios.get(secure_url_original, { responseType: 'arraybuffer' })
+//                     const audioBuffer = Buffer.from(response.data)
+
+//                     const fileExtension = path.extname(name)
+//                     const localFileName = `${nombreArchivo}${fileExtension}`
+//                     const localFilePath = path.join(__dirname, '..', 'public', 'assets', localFileName);
+//                     fs.writeFileSync(localFilePath, audioBuffer)
+
+//                     //* Transcripcion del audio con openAI
+//                     const openai = new OpenAI({
+//                         apiKey: process.env.API_OPENAI,
+//                     })
+
+//                     const transcription = await openai.audio.transcriptions.create({
+//                         file: fs.createReadStream(path.join(__dirname, '..', 'public', 'assets', `${nombreArchivo}.mp3`)),
+//                         model: 'whisper-1',
+//                         language: `${code_receptor}`
+
+//                     })
+
+//                     //* traduccion de la transcipcion del audio 
+//                     const languageCode = buscar_LanguageCode(code_emisor)
+//                     const text = transcription.text
+
+//                     const textoTraducido = await translate(text, languageCode);
+
+//                     console.log("textToSynthesize:", textoTraducido);
+//                     //* creacion del nuevo audio traducido
+//                     const client = new textToSpeech.TextToSpeechClient();
+//                     const request = {
+//                         input: { text: textoTraducido },
+//                         voice: { languageCode, ssmlGender: "NEUTRAL" },
+//                         audioConfig: { audioEncoding: "MP3" },
+//                     };
+
+//                     const [responseGoogle] = await client.synthesizeSpeech(request);
+
+//                     // Genera un nombre de archivo único basado en el timestamp
+//                     const fileName = `${Date.now()}.mp3`;
+
+//                     // Ruta completa del archivo
+//                     const filePath = path.join(__dirname, "..", "public", "audio", fileName)
+
+//                     // Escribe el contenido binario del audio en el archivo
+//                     const writeFile = util.promisify(fs.writeFile);
+//                     await writeFile(filePath, responseGoogle.audioContent, "binary")
+//                     console.log(`Audio content written to file: ${filePath}`)
+
+//                     //* subida del audio traducido a cloudinary
+//                     const { secure_url: secure_url_traducido } = await cloudinary.uploader.upload(filePath, {
+//                         folder: 'traductor_ia',
+//                         resource_type: 'auto',
+//                         type: 'upload',
+//                     })
+//                     const firebase_message=await db.collection('messages').add({
+//                         uid_chat,
+//                         uid_usuario,
+//                         audio_url_original: secure_url_original,
+//                         code_emisor,
+//                         audio_url_traducido: secure_url_traducido,
+//                         code_receptor
+//                     })
+//                     const nuevoMensaje = await Messages.create({
+//                         mensaje: '$',
+//                         uid_chat,
+//                         uid_usuario,
+//                         audio_url: secure_url_original,
+//                         code_639: code_receptor
+//                     })
+
+//                     const nuevoMensajeTraducido = await Messages.create({
+//                         mensaje: '$',
+//                         uid_chat,
+//                         uid_usuario,
+//                         audio_url: secure_url_traducido,
+//                         code_639: code_emisor
+//                     })
+
+//                     return res.json({
+//                         nuevoMensaje,
+//                         nuevoMensajeTraducido,
+//                         firebase_message
+//                     })
+//                 }
 
 
-    } catch (error) {
-        console.log(error)
-        res.status(400).json({ mensaje: 'Error al enviar un audio ' })
-    }
-}
+
+//             } else {
+//                 return res.status(400).json({ mensaje: 'no viene un audio en la solicitud' })
+//             }
+
+//         } else {
+//             return res.status(400).json({ mensaje: 'el chat no existe' })
+//         }
+
+
+//     } catch (error) {
+//         console.log(error)
+//         res.status(400).json({ mensaje: 'Error al enviar un audio ' })
+//     }
+// }
 
 const mis_mensajes_otro_usuario = async (req, res) => {
     try {
@@ -1060,5 +1060,5 @@ module.exports = {
     eliminar_un_mensaje,
     mensajes_del_chat,
     chat_list_uid_usuario,
-    enviar_audio_firebase
+   
 }

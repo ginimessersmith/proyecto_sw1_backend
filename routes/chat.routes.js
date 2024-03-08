@@ -10,7 +10,16 @@ const {
     validarCampos,
     esAdminRole,
 } = require("../middlewares/exportsMiddlewares");
-const { chatPost, chat_Por_Uid_Usuario, crear_mensaje_agregar_al_chat, enviar_audio, mis_mensajes_otro_usuario,eliminar_chat,eliminar_un_mensaje, mensajes_del_chat, chat_list_uid_usuario, enviar_audio_firebase } = require("../controllers/chat.controller");
+const { chatPost,
+    chat_Por_Uid_Usuario,
+    crear_mensaje_agregar_al_chat,
+    enviar_audio,
+    mis_mensajes_otro_usuario,
+    eliminar_chat,
+    eliminar_un_mensaje,
+    mensajes_del_chat,
+    chat_list_uid_usuario,
+     } = require("../controllers/chat.controller");
 const router = Router();
 
 router.post('/', [
@@ -67,9 +76,9 @@ router.get('/chat_list_uid_usuario/:uid', [
     validarCampos
 ], chat_list_uid_usuario)
 
-router.post('/enviar_audio_firebase', [
-    check('uid_usuario').custom((uid_usuario) => esUidValido(uid_usuario)),
-    validarCampos
-], enviar_audio_firebase)
+// router.post('/enviar_audio_firebase', [
+//     check('uid_usuario').custom((uid_usuario) => esUidValido(uid_usuario)),
+//     validarCampos
+// ], enviar_audio_firebase)
 
 module.exports = router
