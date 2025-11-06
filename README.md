@@ -98,11 +98,11 @@ Crea un archivo .env en la raíz del proyecto y copia el contenido del archivo .
 
 # 5. Iniciar el Servidor
 
-**Modo desarrollo **
+**Modo desarrollo**
 ```bash
 npm run dev
 ```
-# Modo producción
+**Modo producción**
 ```bash
 npm run start
 ```
